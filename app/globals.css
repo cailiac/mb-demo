@@ -48,3 +48,24 @@ body { font-family: 'Inter', sans-serif; font-weight: 300; background: var(--cre
 /* Scrollbar */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-thumb { background: var(--cream-dd); border-radius: 2px; }
+
+/* ── Responsive layout ── */
+.panel-grid { display: grid; grid-template-columns: 1fr 2fr 1fr; border-bottom: 2px solid #EDE3D4; }
+.form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.form-row-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-bottom: 18px; }
+.form-row-4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; margin-bottom: 20px; }
+.form-row-trip { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 20px; }
+.form-section-pad { max-width: 860px; margin: 0 auto; padding: 52px 40px; }
+
+@media (max-width: 768px) {
+  .panel-grid { grid-template-columns: 1fr !important; }
+  .panel-grid > *:nth-child(1) { order: 2; border-right: none !important; border-top: 1px solid #EDE3D4; }
+  .panel-grid > *:nth-child(2) { order: 1; }
+  .panel-grid > *:nth-child(3) { order: 3; border-left: none !important; border-top: 1px solid #EDE3D4; }
+  .form-row-2 { grid-template-columns: 1fr !important; }
+  .form-row-3 { grid-template-columns: 1fr 1fr !important; }
+  .form-row-4 { grid-template-columns: repeat(2,1fr) !important; }
+  .form-row-trip { grid-template-columns: repeat(2,1fr) !important; }
+  .form-section-pad { padding: 32px 20px !important; }
+  .hide-mobile { display: none !important; }
+}
