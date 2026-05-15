@@ -48,8 +48,8 @@ function makeIcon(active: boolean) {
   });
 }
 
-const BRAZIL: [number, number] = [-15, -52];
-const BRAZIL_ZOOM = 4;
+const WORLD_CENTER: [number, number] = [20, 0]; // Centrado entre Europa y África
+const INITIAL_ZOOM = 2; // Zoom alejado para ver todo el mapa
 
 // ── Fix mobile: call invalidateSize after map mounts ──
 function MapReady() {
@@ -143,8 +143,8 @@ interface Props {
 export default function LeafletMap({ onSelect, selectedDest }: Props) {
   return (
     <MapContainer
-      center={BRAZIL}
-      zoom={BRAZIL_ZOOM}
+      center={[20, 0]}
+      zoom={2}
       scrollWheelZoom={false}
       worldCopyJump={false}
       maxBounds={[[-85, -180], [85, 180]]}
