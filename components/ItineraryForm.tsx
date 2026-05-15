@@ -3,189 +3,161 @@ import { useState, useEffect } from "react";
 import PhoneInput from "./PhoneInput";
 import { DESTINATIONS } from "./destinations";
 
-const TRIP_TYPES = [
-  {icon:"🌅",label:"Leisure",val:"leisure"},
-  {icon:"💑",label:"Honeymoon",val:"honeymoon"},
-  {icon:"👨‍👩‍👧",label:"Family",val:"family"},
-  {icon:"💼",label:"Business",val:"business"},
-  {icon:"🎉",label:"Special occasion",val:"special"},
-  {icon:"🧳",label:"Solo",val:"solo"},
-];
-const SERVICES = [
-  {icon:"✈️",label:"Flights",val:"flights"},
-  {icon:"🏨",label:"Hotel",val:"hotel"},
-  {icon:"🚌",label:"Transfers",val:"transfers"},
-  {icon:"🚗",label:"Car hire",val:"car"},
-  {icon:"🎭",label:"Activities",val:"activities"},
-  {icon:"🛡️",label:"Insurance",val:"insurance"},
-  {icon:"🧭",label:"Tour guide",val:"guide"},
-  {icon:"🎁",label:"Special touch",val:"special_touch"},
+// Destinations grouped by region — hardcoded to match the map exactly
+const DEST_GROUPS: {region:string; cities:string[]}[] = [
+  { region:"Middle East",   cities:["Dubai","Abu Dhabi"] },
+  { region:"Indian Ocean",  cities:["Maldives","Mauritius"] },
+  { region:"Asia",          cities:["Sri Lanka","Bali","Phuket","Singapore","Tokyo","Kyoto","Osaka","Hakone","Hanoi","Helsinki"] },
+  { region:"Europe",        cities:["Florence","Pisa","Rome","Dubrovnik","Crete","Mykonos","Lisbon"] },
+  { region:"Americas",      cities:["New York","Cancún","Buenos Aires"] },
+  { region:"Africa",        cities:["Cape Town"] },
 ];
 
-const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-const WHEN_OPTIONS = ["Next month","In 2–3 months","In 3–6 months","In 6–12 months","Not sure yet"];
-const FLEX_RANGES = ["± 3 days","± 1 week","± 2 weeks","± 1 month"];
-const DURATIONS = ["3–4 nights","5–7 nights","8–10 nights","2 weeks","3 weeks","1 month +"];
+const MONTHS      = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const WHEN_OPT    = ["Next month","In 2–3 months","In 3–6 months","In 6–12 months","Not sure yet"];
+const FLEX_CHIPS  = ["Exact dates","± 3 days","± 1 week","± 2 weeks","± 1 month"];
+const TRIP_TYPES  = [{label:"Leisure",val:"leisure"},{label:"Honeymoon",val:"honeymoon"},{label:"Family",val:"family"},{label:"Business",val:"business"},{label:"Special occasion",val:"special"},{label:"Solo",val:"solo"}];
+const SERVICES    = [{label:"Flights",val:"flights"},{label:"Hotel",val:"hotel"},{label:"Transfers",val:"transfers"},{label:"Car hire",val:"car"},{label:"Activities",val:"activities"},{label:"Insurance",val:"insurance"},{label:"Tour guide",val:"guide"},{label:"Special touch",val:"special_touch"}];
+
+function getMonthsFor(when: string): string[] {
+  const m = new Date().getMonth();
+  const range: Record<string,[number,number]> = {
+    "Next month":    [1,1], "In 2–3 months":[2,3],
+    "In 3–6 months":[3,6], "In 6–12 months":[6,12],
+  };
+  if (!range[when]) return MONTHS;
+  const [from, to] = range[when];
+  const result: string[] = [];
+  for (let i=from; i<=to; i++) result.push(MONTHS[(m+i)%12]);
+  return result;
+}
 
 interface Props { preselectedDest?: string; }
 
 export default function ItineraryForm({ preselectedDest }: Props) {
-  const [step, setStep]           = useState(1);
-  const [submitted, setSubmitted] = useState(false);
-  const [errors, setErrors]       = useState<Record<string,string>>({});
+  const [step, setStep]         = useState(1);
+  const [submitted, setSubmit]  = useState(false);
 
   // Step 1
   const [name, setName]   = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [nat, setNat]     = useState("");
-  const [adults, setAdults]   = useState(2);
-  const [children, setChild]  = useState(0);
-  const [infants, setInfant]  = useState(0);
-  const [tripType, setType]   = useState("leisure");
+  const [adults, setAd]   = useState(2);
+  const [children, setCh] = useState(0);
+  const [infants, setIn]  = useState(0);
+  const [tripType, setTT] = useState("leisure");
 
   // Step 2
-  const [dest, setDest]   = useState(preselectedDest || "");
-  const [style, setStyle] = useState("");
-  const [from, setFrom]   = useState("");
-  const [stars, setStars] = useState("");
-
-  // Date mode
-  const [dateMode, setDateMode] = useState<"fixed"|"flexible"|"undecided">("fixed");
-  const [depDate, setDep]       = useState("");
-  const [retDate, setRet]       = useState("");
-  const [flexMonth, setFlexMonth]       = useState("");
-  const [flexDuration, setFlexDuration] = useState("");
-  const [flexRange, setFlexRange]       = useState("");
-  const [undecidedWhen, setUndecidedWhen] = useState("");
-  const [undecidedMonth, setUndecidedMonth] = useState("");
+  const [dest, setDest]             = useState(preselectedDest||"");
+  const [multiCity, setMultiCity]   = useState(false);
+  const [extraCities, setExtra]     = useState<string[]>([]);
+  const [addingCity, setAddingCity] = useState("");
+  const [style, setStyle]           = useState("");
+  const [dateMode, setDateMode]     = useState("fixed");
+  const [depDate, setDep]           = useState("");
+  const [retDate, setRet]           = useState("");
+  const [flexRange, setFlex]        = useState("Exact dates");
+  const [undWhen, setUndWhen]       = useState("");
+  const [undMonth, setUndMonth]     = useState("");
+  const [from, setFrom]             = useState("");
+  const [stars, setStars]           = useState("");
 
   // Step 3
   const [services, setSvcs] = useState(["flights","hotel","transfers"]);
   const [notes, setNotes]   = useState("");
 
-  // Step 4
-  const [agreed, setAgreed] = useState(true);
+  useEffect(()=>{
+    if(preselectedDest){ setDest(preselectedDest); setStep(1); }
+  },[preselectedDest]);
 
-  useEffect(() => {
-    if (preselectedDest) { setDest(preselectedDest); setStep(1); }
-  }, [preselectedDest]);
+  const toggleSvc = (v:string)=>setSvcs(s=>s.includes(v)?s.filter(x=>x!==v):[...s,v]);
 
-  const toggleSvc = (v: string) => setSvcs(s => s.includes(v) ? s.filter(x=>x!==v) : [...s,v]);
-
-  // ── Styles ──
+  // ── Shared styles ──────────────────────────────────────────────
+  const cream = "#F8F2E8";
+  const wine  = "#6B1532";
   const fi: React.CSSProperties = {
-    background:"#F8F2E8", border:"1px solid #D4BFA3", borderRadius:8,
+    background:cream, border:"1px solid #D4BFA3", borderRadius:8,
     padding:"11px 14px", fontFamily:"Inter,sans-serif", fontSize:14,
     color:"#1a0a0f", outline:"none", width:"100%", transition:"border-color .25s,background .25s",
   };
-  const fl: React.CSSProperties = {
-    fontSize:10, letterSpacing:"2px", textTransform:"uppercase" as const,
-    color:"#7a5560", marginBottom:6, display:"block", fontWeight:400,
-  };
-  const errStyle: React.CSSProperties = { fontSize:11, color:"#c0392b", marginTop:4 };
-  const selStyle: React.CSSProperties = {
+  const selFi: React.CSSProperties = {
     ...fi, appearance:"none" as const, cursor:"pointer",
     backgroundImage:`url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236B1532' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`,
     backgroundRepeat:"no-repeat", backgroundPosition:"right 12px center", paddingRight:32,
   };
-  const focusOn  = (e: React.FocusEvent<HTMLInputElement|HTMLTextAreaElement>) => { e.target.style.borderColor="#6B1532"; e.target.style.background="white"; };
-  const focusOff = (e: React.FocusEvent<HTMLInputElement|HTMLTextAreaElement>) => { e.target.style.borderColor="#D4BFA3"; e.target.style.background="#F8F2E8"; };
-
-  const fiError = (field: string): React.CSSProperties => ({
-    ...fi, borderColor: errors[field] ? "#c0392b" : "#D4BFA3",
-  });
-
-  // ── Validation ──
-  const validateStep1 = () => {
-    const e: Record<string,string> = {};
-    if (!name.trim())                    e.name  = "Name is required";
-    if (!email.trim())                   e.email = "Email is required";
-    else if (!/\S+@\S+\.\S+/.test(email)) e.email = "Enter a valid email";
-    if (!phone.trim())                   e.phone = "WhatsApp number is required";
-    setErrors(e);
-    return Object.keys(e).length === 0;
+  const fl: React.CSSProperties = {
+    fontSize:10, letterSpacing:"2px", textTransform:"uppercase" as const,
+    color:"#7a5560", marginBottom:6, display:"block",
   };
+  const fo = (e:React.FocusEvent<HTMLInputElement|HTMLTextAreaElement>)=>{e.target.style.borderColor=wine;e.target.style.background="white";};
+  const fb = (e:React.FocusEvent<HTMLInputElement|HTMLTextAreaElement>)=>{e.target.style.borderColor="#D4BFA3";e.target.style.background=cream;};
 
-  const Counter = ({ val, dec, inc }: { val:number; dec:()=>void; inc:()=>void }) => (
+  // ── Sub-components ─────────────────────────────────────────────
+  const Counter = ({val,dec,inc}:{val:number;dec:()=>void;inc:()=>void})=>(
     <div style={{display:"flex",alignItems:"center",gap:10}}>
-      <button onClick={dec} style={{width:28,height:28,borderRadius:"50%",border:"1.5px solid #D4BFA3",background:"white",color:"#6B1532",fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>−</button>
-      <span style={{fontFamily:"Cormorant Garamond,serif",fontSize:26,width:28,textAlign:"center",color:"#1a0a0f",fontWeight:400}}>{val}</span>
-      <button onClick={inc} style={{width:28,height:28,borderRadius:"50%",border:"1.5px solid #D4BFA3",background:"white",color:"#6B1532",fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>+</button>
+      <button onClick={dec} style={{width:28,height:28,borderRadius:"50%",border:"1.5px solid #D4BFA3",background:"white",color:wine,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>−</button>
+      <span style={{fontFamily:"Cormorant Garamond,serif",fontSize:26,width:28,textAlign:"center",color:"#1a0a0f"}}>{val}</span>
+      <button onClick={inc} style={{width:28,height:28,borderRadius:"50%",border:"1.5px solid #D4BFA3",background:"white",color:wine,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>+</button>
     </div>
   );
-  const BtnNext = ({ label, onClick }: { label:string; onClick:()=>void }) => (
-    <button onClick={onClick} style={{width:"100%",background:"#6B1532",color:"white",border:"none",borderRadius:10,padding:14,fontSize:11,letterSpacing:"2px",textTransform:"uppercase",fontWeight:500,cursor:"pointer",fontFamily:"Inter,sans-serif",marginTop:28}}>
+
+  const ModeBtn = ({mode,label,sub}:{mode:string;label:string;sub:string})=>(
+    <div onClick={()=>setDateMode(mode)} style={{
+      flex:1, padding:"14px 12px", textAlign:"center", cursor:"pointer",
+      border:`1px solid ${dateMode===mode?wine:"#D4BFA3"}`,
+      borderRadius:10, background:dateMode===mode?"rgba(107,21,50,.04)":cream,
+      transition:"all .2s",
+    }}>
+      <div style={{fontSize:13,fontWeight:500,color:dateMode===mode?wine:"#3d1520",marginBottom:3}}>{label}</div>
+      <div style={{fontSize:11,color:"#B8A0A8"}}>{sub}</div>
+    </div>
+  );
+
+  const BtnNext = ({label,onClick}:{label:string;onClick:()=>void})=>(
+    <button onClick={onClick} style={{width:"100%",background:wine,color:"white",border:"none",borderRadius:10,padding:14,fontSize:11,letterSpacing:"2px",textTransform:"uppercase",fontWeight:500,cursor:"pointer",fontFamily:"Inter,sans-serif",marginTop:28}}>
       {label}
     </button>
   );
-  const BtnBack = ({ onClick }: { onClick:()=>void }) => (
+  const BtnBack = ({onClick}:{onClick:()=>void})=>(
     <button onClick={onClick} style={{background:"white",color:"#7a5560",border:"1px solid #D4BFA3",borderRadius:10,padding:"14px 16px",fontSize:11,letterSpacing:"1.5px",textTransform:"uppercase",cursor:"pointer",fontFamily:"Inter,sans-serif",marginTop:12}}>
       ← Back
     </button>
   );
 
-  const ModeBtn = ({ mode, label, sub }: { mode:"fixed"|"flexible"|"undecided"; label:string; sub:string }) => (
-    <div onClick={()=>setDateMode(mode)} style={{
-      flex:1, border:`1.5px solid ${dateMode===mode?"#6B1532":"#D4BFA3"}`,
-      borderRadius:10, padding:"12px 10px", textAlign:"center", cursor:"pointer",
-      background:dateMode===mode?"rgba(107,21,50,.06)":"#F8F2E8", transition:"all .25s",
-    }}>
-      <div style={{fontSize:11,fontWeight:500,color:dateMode===mode?"#6B1532":"#3d1520",marginBottom:3}}>{label}</div>
-      <div style={{fontSize:10,color:"#7a5560"}}>{sub}</div>
-    </div>
-  );
+  // destInfo not needed — using dest string directly
+  const allCities = Object.keys(DESTINATIONS).filter(k=>k!==dest&&!extraCities.includes(k));
 
-  const destInfo = dest ? DESTINATIONS[dest] : null;
-
-  if (submitted) return (
+  if(submitted) return(
     <div style={{textAlign:"center",padding:"48px 0"}}>
-      <div style={{fontSize:56,marginBottom:18}}>✈️</div>
+      <div style={{fontFamily:"Cormorant Garamond,serif",fontSize:48,marginBottom:18}}>✈</div>
       <h3 style={{fontFamily:"Cormorant Garamond,serif",fontSize:38,fontWeight:300,marginBottom:10}}>Request sent!</h3>
-      <p style={{fontSize:14,color:"#7a5560",lineHeight:1.8,marginBottom:28}}>Mercedes will review your itinerary and reach out to you personally.</p>
-      <a href="https://wa.me/971553719863" target="_blank" style={{background:"#6B1532",color:"white",padding:"13px 28px",borderRadius:32,textDecoration:"none",fontSize:11,letterSpacing:"2px",textTransform:"uppercase",fontWeight:500}}>
-        💬 Message on WhatsApp
+      <p style={{fontSize:14,color:"#7a5560",lineHeight:1.8,marginBottom:28}}>Mercedes will review your itinerary and get back to you within 24 hours.</p>
+      <a href="https://wa.me/971553719863" target="_blank" style={{background:wine,color:"white",padding:"13px 28px",borderRadius:32,textDecoration:"none",fontSize:11,letterSpacing:"2px",textTransform:"uppercase",fontWeight:500}}>
+        Message on WhatsApp
       </a>
     </div>
   );
 
-  return (
+  return(
     <div>
-      {/* Destination banner */}
-      {destInfo && (
-        <div style={{
-          display:"flex",alignItems:"center",gap:12,
-          background:"linear-gradient(135deg,#4a0f22,#6B1532)",
-          borderRadius:10,padding:"14px 18px",marginBottom:24,
-          border:"1px solid rgba(201,169,110,.25)",
-        }}>
-          <span style={{fontSize:28}}>{destInfo.emoji}</span>
-          <div>
-            <p style={{fontSize:10,letterSpacing:"2.5px",textTransform:"uppercase",color:"rgba(248,242,232,.5)",marginBottom:2}}>Planning a trip to</p>
-            <p style={{fontFamily:"Cormorant Garamond,serif",fontSize:20,color:"#F8F2E8",fontWeight:300}}>{destInfo.label}</p>
-          </div>
-          <button onClick={()=>setDest("")} style={{marginLeft:"auto",background:"rgba(248,242,232,.1)",border:"none",color:"rgba(248,242,232,.5)",cursor:"pointer",borderRadius:6,padding:"4px 10px",fontSize:11}}>
-            ✕ Change
-          </button>
-        </div>
-      )}
-
-      {/* Progress bar */}
+      {/* ── Progress bar ── */}
       <div style={{display:"flex",border:"1px solid #D4BFA3",borderRadius:10,overflow:"hidden",marginBottom:32}}>
         {[{n:1,l:"Travellers"},{n:2,l:"Destination"},{n:3,l:"Services"},{n:4,l:"Review"}].map(({n,l})=>(
           <div key={n} onClick={()=>n<step&&setStep(n)} style={{
-            flex:1,padding:"12px 8px",textAlign:"center",fontSize:10,letterSpacing:"1.5px",textTransform:"uppercase",
-            color:n===step?"#6B1532":n<step?"#6B1532":"#B8A0A8",
-            background:n===step?"white":n<step?"white":"#F8F2E8",
+            flex:1, padding:"12px 8px", textAlign:"center", fontSize:10, letterSpacing:"1.5px", textTransform:"uppercase",
+            color:n===step?wine:n<step?wine:"#B8A0A8",
+            background:n===step?"white":n<step?"white":cream,
             borderRight:n<4?"1px solid #D4BFA3":"none",
-            display:"flex",flexDirection:"column",alignItems:"center",gap:5,
-            cursor:n<step?"pointer":"default",transition:"all .3s",
+            display:"flex", flexDirection:"column", alignItems:"center", gap:5,
+            cursor:n<step?"pointer":"default", transition:"all .3s",
           }}>
-            <span style={{width:22,height:22,borderRadius:"50%",
-              border:`1.5px solid ${n===step?"#6B1532":n<step?"#6B1532":"#D4BFA3"}`,
-              fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",
-              background:n<step?"#6B1532":"transparent",
-              color:n<step?"white":n===step?"#6B1532":"#B8A0A8",transition:"all .3s",
+            <span style={{
+              width:22, height:22, borderRadius:"50%",
+              border:`1.5px solid ${n===step?wine:n<step?wine:"#D4BFA3"}`,
+              fontSize:11, display:"flex", alignItems:"center", justifyContent:"center",
+              background:n<step?wine:"transparent",
+              color:n<step?"white":n===step?wine:"#B8A0A8", transition:"all .3s",
             }}>{n<step?"✓":n}</span>
             {l}
           </div>
@@ -195,41 +167,40 @@ export default function ItineraryForm({ preselectedDest }: Props) {
       {/* ── STEP 1: Travellers ── */}
       {step===1&&(
         <div>
+          {/* Destination banner */}
+          {dest&&dest!=="Other"&&(
+            <div style={{display:"flex",alignItems:"center",gap:14,background:"linear-gradient(135deg,#4a0f22,#6B1532)",borderRadius:10,padding:"14px 18px",marginBottom:20,border:"1px solid rgba(201,169,110,.2)"}}>
+              <div>
+                <p style={{fontSize:10,letterSpacing:"2.5px",textTransform:"uppercase",color:"rgba(248,242,232,.5)",marginBottom:2}}>Planning a trip to</p>
+                <p style={{fontFamily:"Cormorant Garamond,serif",fontSize:20,color:"#F5EDD8",fontWeight:300}}>
+                  {dest}{extraCities.length>0?" + "+extraCities.join(", "):""}
+                </p>
+              </div>
+              <button onClick={()=>{setDest("");setExtra([]);}} style={{marginLeft:"auto",background:"rgba(248,242,232,.1)",border:"none",color:"rgba(248,242,232,.45)",cursor:"pointer",borderRadius:6,padding:"4px 10px",fontSize:12}}>
+                Change
+              </button>
+            </div>
+          )}
+
           <div className="form-row-2">
-            <div>
-              <label style={fl}>First name <span style={{color:"#c0392b"}}>*</span></label>
-              <input style={fiError("name")} value={name} onChange={e=>{setName(e.target.value);if(errors.name)setErrors(p=>({...p,name:""}));}} placeholder="Your name" onFocus={focusOn} onBlur={focusOff}/>
-              {errors.name && <p style={errStyle}>{errors.name}</p>}
-            </div>
-            <div>
-              <label style={fl}>Email <span style={{color:"#c0392b"}}>*</span></label>
-              <input style={fiError("email")} type="email" value={email} onChange={e=>{setEmail(e.target.value);if(errors.email)setErrors(p=>({...p,email:""}));}} placeholder="your@email.com" onFocus={focusOn} onBlur={focusOff}/>
-              {errors.email && <p style={errStyle}>{errors.email}</p>}
-            </div>
+            <div><label style={fl}>First name</label><input style={fi} value={name} onChange={e=>setName(e.target.value)} placeholder="Your name" onFocus={fo} onBlur={fb}/></div>
+            <div><label style={fl}>Email</label><input style={fi} type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="your@email.com" onFocus={fo} onBlur={fb}/></div>
           </div>
           <div className="form-row-2">
-            <div>
-              <label style={fl}>WhatsApp <span style={{color:"#c0392b"}}>*</span></label>
-              <PhoneInput value={phone} onChange={v=>{setPhone(v);if(errors.phone)setErrors(p=>({...p,phone:""}));}}/>
-              {errors.phone && <p style={errStyle}>{errors.phone}</p>}
-            </div>
-            <div>
-              <label style={fl}>Nationality</label>
-              <input style={fi} value={nat} onChange={e=>setNat(e.target.value)} placeholder="e.g. Argentine, British..." onFocus={focusOn} onBlur={focusOff}/>
-            </div>
+            <div><label style={fl}>WhatsApp</label><PhoneInput value={phone} onChange={setPhone}/></div>
+            <div><label style={fl}>Nationality</label><input style={fi} value={nat} onChange={e=>setNat(e.target.value)} placeholder="e.g. Argentine, British..." onFocus={fo} onBlur={fb}/></div>
           </div>
 
           <label style={{...fl,marginBottom:12}}>How many are travelling?</label>
-          <div className="form-row-3">
+          <div className="form-row-3" style={{marginBottom:18}}>
             {[
-              {ico:"👤",lbl:"Adults",sub:"18+",val:adults,dec:()=>setAdults(a=>Math.max(1,a-1)),inc:()=>setAdults(a=>a+1)},
-              {ico:"🧒",lbl:"Children",sub:"2–17",val:children,dec:()=>setChild(c=>Math.max(0,c-1)),inc:()=>setChild(c=>c+1)},
-              {ico:"👶",lbl:"Infants",sub:"Under 2",val:infants,dec:()=>setInfant(i=>Math.max(0,i-1)),inc:()=>setInfant(i=>i+1)},
-            ].map(({ico,lbl,sub,val,dec,inc})=>(
-              <div key={lbl} style={{border:"1px solid #D4BFA3",borderRadius:10,padding:14,display:"flex",flexDirection:"column",alignItems:"center",gap:10,background:"#F8F2E8"}}>
-                <div style={{fontSize:24}}>{ico}</div>
-                <div style={{fontSize:11,color:"#3d1520",textAlign:"center",lineHeight:1.3,fontWeight:500}}>
-                  {lbl}<br/><span style={{fontSize:9,color:"#7a5560",fontWeight:300}}>{sub}</span>
+              {lbl:"Adults",sub:"18+",val:adults,dec:()=>setAd(a=>Math.max(1,a-1)),inc:()=>setAd(a=>a+1)},
+              {lbl:"Children",sub:"2–17",val:children,dec:()=>setCh(c=>Math.max(0,c-1)),inc:()=>setCh(c=>c+1)},
+              {lbl:"Infants",sub:"Under 2",val:infants,dec:()=>setIn(i=>Math.max(0,i-1)),inc:()=>setIn(i=>i+1)},
+            ].map(({lbl,sub,val,dec,inc})=>(
+              <div key={lbl} style={{border:"1px solid #D4BFA3",borderRadius:10,padding:14,display:"flex",flexDirection:"column",alignItems:"center",gap:10,background:cream}}>
+                <div style={{fontSize:12,fontWeight:500,color:"#3d1520",textAlign:"center"}}>
+                  {lbl}<br/><span style={{fontSize:10,color:"#B8A0A8",fontWeight:300}}>{sub}</span>
                 </div>
                 <Counter val={val} dec={dec} inc={inc}/>
               </div>
@@ -237,96 +208,156 @@ export default function ItineraryForm({ preselectedDest }: Props) {
           </div>
 
           <label style={{...fl,marginBottom:12}}>Type of trip</label>
-          <div className="form-row-trip">
+          <div className="form-row-3" style={{marginBottom:20}}>
             {TRIP_TYPES.map(t=>(
-              <div key={t.val} onClick={()=>setType(t.val)} style={{
-                border:`1px solid ${tripType===t.val?"#6B1532":"#D4BFA3"}`,borderRadius:10,padding:"14px 10px",
-                textAlign:"center",cursor:"pointer",
-                background:tripType===t.val?"rgba(107,21,50,.06)":"#F8F2E8",transition:"all .25s",
+              <div key={t.val} onClick={()=>setTT(t.val)} style={{
+                border:`1px solid ${tripType===t.val?wine:"#D4BFA3"}`,
+                borderRadius:10, padding:"13px 10px", textAlign:"center", cursor:"pointer",
+                background:tripType===t.val?"rgba(107,21,50,.05)":cream, transition:"all .25s",
               }}>
-                <div style={{fontSize:24,marginBottom:5}}>{t.icon}</div>
-                <div style={{fontSize:10,letterSpacing:"1px",textTransform:"uppercase",color:tripType===t.val?"#6B1532":"#3d1520",fontWeight:tripType===t.val?500:400}}>{t.label}</div>
+                <div style={{fontSize:12,letterSpacing:"0.5px",color:tripType===t.val?wine:"#3d1520",fontWeight:tripType===t.val?500:300}}>{t.label}</div>
               </div>
             ))}
           </div>
-          <BtnNext label="Next: Destination & Dates →" onClick={()=>{ if(validateStep1()) setStep(2); }}/>
+          <BtnNext label="Next: Destination & Dates →" onClick={()=>setStep(2)}/>
         </div>
       )}
 
       {/* ── STEP 2: Destination ── */}
       {step===2&&(
         <div>
-          <div className="form-row-2">
+
+          {/* Primary destination + style */}
+          <div className="form-row-2" style={{marginBottom:16}}>
             <div>
               <label style={fl}>Destination</label>
-              <select style={selStyle} value={dest} onChange={e=>setDest(e.target.value)}>
+              <select style={selFi} value={dest} onChange={e=>{setDest(e.target.value);setExtra([]);setMultiCity(false);}}>
                 <option value="">Where do you want to go?</option>
-                <optgroup label="Middle East & Asia">
-                  {["Dubai","Maldives","Sri Lanka","Bali","Phuket","Philippines"].map(d=><option key={d} value={d}>{d}</option>)}
-                </optgroup>
-                <optgroup label="Europe">
-                  <option value="Paris">Paris, France</option>
-                  <option value="London">London, UK</option>
-                </optgroup>
-                <optgroup label="Latin America">
-                  <option value="Mexico">México</option>
-                  <option value="Buenos Aires">Buenos Aires</option>
-                </optgroup>
+                {DEST_GROUPS.map(({region,cities})=>(
+                  <optgroup key={region} label={region}>
+                    {cities.map(c=><option key={c} value={c}>{c}</option>)}
+                  </optgroup>
+                ))}
                 <option value="Other">Other destination...</option>
               </select>
             </div>
             <div>
               <label style={fl}>Trip style</label>
-              <select style={selStyle} value={style} onChange={e=>setStyle(e.target.value)}>
+              <select style={selFi} value={style} onChange={e=>setStyle(e.target.value)}>
                 <option value="">Any preference...</option>
                 {["City Break","Island Getaway","Cultural Immersion","Adventure","Luxury & Relaxation"].map(s=><option key={s}>{s}</option>)}
               </select>
             </div>
           </div>
 
+          {/* Multi-city section */}
+          {dest && dest!=="Other" && (
+            <div style={{marginBottom:18,padding:"14px 16px",background:cream,borderRadius:10,border:"1px solid #EDE3D4"}}>
+
+              {/* Toggle */}
+              <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",marginBottom:multiCity?14:0}}>
+                <div
+                  onClick={()=>{setMultiCity(!multiCity);setExtra([]);}}
+                  style={{
+                    width:38,height:22,borderRadius:11,
+                    background:multiCity?wine:"#D4BFA3",
+                    position:"relative",transition:"background .25s",cursor:"pointer",flexShrink:0,
+                  }}>
+                  <div style={{
+                    position:"absolute",top:3,left:multiCity?18:3,
+                    width:16,height:16,borderRadius:"50%",background:"white",
+                    transition:"left .25s",boxShadow:"0 1px 3px rgba(0,0,0,.2)",
+                  }}/>
+                </div>
+                <span style={{fontSize:13,color:"#3d1520"}}>Combining multiple cities?</span>
+              </label>
+
+              {/* City picker */}
+              {multiCity && (
+                <div>
+                  {/* Selected extra cities */}
+                  {extraCities.length>0&&(
+                    <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:12}}>
+                      {extraCities.map(c=>(
+                        <div key={c} style={{
+                          display:"flex",alignItems:"center",gap:8,
+                          background:"white",border:`1px solid ${wine}`,
+                          borderRadius:8,padding:"6px 12px",fontSize:13,color:wine,
+                        }}>
+                          {DESTINATIONS[c]?.label||c}
+                          <button onClick={()=>setExtra(p=>p.filter(x=>x!==c))} style={{
+                            background:"none",border:"none",cursor:"pointer",
+                            color:"#B8A0A8",fontSize:16,lineHeight:1,padding:0,
+                            display:"flex",alignItems:"center",
+                          }}>×</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Dropdown to add a city */}
+                  {extraCities.length < 4 && (
+                    <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                      <select
+                        style={{...selFi,flex:1,fontSize:13,color:addingCity?"#1a0a0f":"#B8A0A8"}}
+                        value={addingCity}
+                        onChange={e=>setAddingCity(e.target.value)}
+                      >
+                        <option value="">Add a city...</option>
+                        {DEST_GROUPS.map(({region,cities})=>{
+                          const available = cities.filter(k=>k!==dest&&!extraCities.includes(k));
+                          if(!available.length) return null;
+                          return(
+                            <optgroup key={region} label={region}>
+                              {available.map(c=><option key={c} value={c}>{c}</option>)}
+                            </optgroup>
+                          );
+                        })}
+                      </select>
+                      <button
+                        onClick={()=>{if(addingCity){setExtra(p=>[...p,addingCity]);setAddingCity("");}}}
+                        disabled={!addingCity}
+                        style={{
+                          padding:"11px 18px",borderRadius:8,border:"none",fontSize:12,
+                          letterSpacing:"1px",textTransform:"uppercase",cursor:addingCity?"pointer":"default",
+                          background:addingCity?wine:"#D4BFA3",color:"white",
+                          transition:"background .2s",whiteSpace:"nowrap",fontFamily:"Inter,sans-serif",
+                        }}>
+                        Add
+                      </button>
+                    </div>
+                  )}
+                  {extraCities.length>=4&&(
+                    <p style={{fontSize:12,color:"#B8A0A8",marginTop:4}}>Maximum of 4 cities reached.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ── Date section ── */}
           <div style={{marginBottom:16}}>
             <label style={{...fl,marginBottom:10}}>When are you thinking of travelling?</label>
             <div style={{display:"flex",gap:10,marginBottom:16}}>
-              <ModeBtn mode="fixed"     label="Fixed dates"   sub="I know my dates"/>
-              <ModeBtn mode="flexible"  label="Flexible"      sub="I have a rough idea"/>
-              <ModeBtn mode="undecided" label="Not decided"   sub="Still planning"/>
+              <ModeBtn mode="fixed"     label="Fixed dates"  sub="I know my dates"/>
+              <ModeBtn mode="undecided" label="Not decided"  sub="Still planning"/>
             </div>
 
             {dateMode==="fixed"&&(
-              <div className="form-row-2">
-                <div><label style={fl}>Departure</label><input style={fi} type="date" value={depDate} onChange={e=>setDep(e.target.value)}/></div>
-                <div><label style={fl}>Return</label><input style={fi} type="date" value={retDate} onChange={e=>setRet(e.target.value)}/></div>
-              </div>
-            )}
-
-            {dateMode==="flexible"&&(
               <div>
-                <div className="form-row-2" style={{marginBottom:12}}>
-                  <div>
-                    <label style={fl}>Preferred month</label>
-                    <select style={selStyle} value={flexMonth} onChange={e=>setFlexMonth(e.target.value)}>
-                      <option value="">Select a month...</option>
-                      {MONTHS.map(m=><option key={m}>{m}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={fl}>Trip duration</label>
-                    <select style={selStyle} value={flexDuration} onChange={e=>setFlexDuration(e.target.value)}>
-                      <option value="">How long?</option>
-                      {DURATIONS.map(d=><option key={d}>{d}</option>)}
-                    </select>
-                  </div>
+                <div className="form-row-2" style={{marginBottom:14}}>
+                  <div><label style={fl}>Departure</label><input style={fi} type="date" value={depDate} onChange={e=>setDep(e.target.value)}/></div>
+                  <div><label style={fl}>Return</label><input style={fi} type="date" value={retDate} onChange={e=>setRet(e.target.value)}/></div>
                 </div>
                 <div>
-                  <label style={{...fl,marginBottom:8}}>Date flexibility</label>
+                  <label style={{...fl,marginBottom:8}}>I'm flexible by</label>
                   <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                    {FLEX_RANGES.map(r=>(
-                      <button key={r} onClick={()=>setFlexRange(r)} style={{
-                        padding:"6px 14px",borderRadius:20,fontSize:12,cursor:"pointer",transition:"all .2s",
-                        background:flexRange===r?"#6B1532":"#F8F2E8",
-                        color:flexRange===r?"white":"#6B1532",
-                        border:`1px solid ${flexRange===r?"#6B1532":"#D4BFA3"}`,
+                    {FLEX_CHIPS.map(r=>(
+                      <button key={r} onClick={()=>setFlex(r)} style={{
+                        padding:"7px 16px",borderRadius:20,fontSize:12,cursor:"pointer",transition:"all .2s",
+                        background:flexRange===r?wine:cream,
+                        color:flexRange===r?"white":wine,
+                        border:`1px solid ${flexRange===r?wine:"#D4BFA3"}`,
                       }}>{r}</button>
                     ))}
                   </div>
@@ -338,16 +369,16 @@ export default function ItineraryForm({ preselectedDest }: Props) {
               <div className="form-row-2">
                 <div>
                   <label style={fl}>Roughly when?</label>
-                  <select style={selStyle} value={undecidedWhen} onChange={e=>setUndecidedWhen(e.target.value)}>
+                  <select style={selFi} value={undWhen} onChange={e=>{setUndWhen(e.target.value);setUndMonth("");}}>
                     <option value="">Select a timeframe...</option>
-                    {WHEN_OPTIONS.map(o=><option key={o}>{o}</option>)}
+                    {WHEN_OPT.map(o=><option key={o}>{o}</option>)}
                   </select>
                 </div>
                 <div>
                   <label style={fl}>Any preferred month?</label>
-                  <select style={selStyle} value={undecidedMonth} onChange={e=>setUndecidedMonth(e.target.value)}>
+                  <select style={selFi} value={undMonth} onChange={e=>setUndMonth(e.target.value)}>
                     <option value="">No preference</option>
-                    {MONTHS.map(m=><option key={m}>{m}</option>)}
+                    {getMonthsFor(undWhen).map(m=><option key={m}>{m}</option>)}
                   </select>
                 </div>
               </div>
@@ -355,24 +386,22 @@ export default function ItineraryForm({ preselectedDest }: Props) {
           </div>
 
           <div className="form-row-2">
-            <div>
-              <label style={fl}>Departing from</label>
-              <input style={fi} value={from} onChange={e=>setFrom(e.target.value)} placeholder="City or airport..." onFocus={focusOn} onBlur={focusOff}/>
-            </div>
+            <div><label style={fl}>Departing from</label><input style={fi} value={from} onChange={e=>setFrom(e.target.value)} placeholder="City or airport..." onFocus={fo} onBlur={fb}/></div>
             <div>
               <label style={fl}>Hotel preference</label>
-              <select style={selStyle} value={stars} onChange={e=>setStars(e.target.value)}>
+              <select style={selFi} value={stars} onChange={e=>setStars(e.target.value)}>
                 <option>No preference</option>
-                <option>3★ — Good & comfortable</option>
-                <option>4★ — Superior quality</option>
-                <option>5★ — Luxury</option>
+                <option>3 stars — Good & comfortable</option>
+                <option>4 stars — Superior quality</option>
+                <option>5 stars — Luxury</option>
                 <option>Boutique / Unique</option>
               </select>
             </div>
           </div>
+
           <div style={{display:"flex",gap:12,marginTop:28}}>
             <BtnBack onClick={()=>setStep(1)}/>
-            <button onClick={()=>setStep(3)} style={{flex:1,background:"#6B1532",color:"white",border:"none",borderRadius:10,padding:14,fontSize:11,letterSpacing:"2px",textTransform:"uppercase",fontWeight:500,cursor:"pointer",fontFamily:"Inter,sans-serif"}}>
+            <button onClick={()=>setStep(3)} style={{flex:1,background:wine,color:"white",border:"none",borderRadius:10,padding:14,fontSize:11,letterSpacing:"2px",textTransform:"uppercase",fontWeight:500,cursor:"pointer",fontFamily:"Inter,sans-serif"}}>
               Next: Services →
             </button>
           </div>
@@ -383,28 +412,29 @@ export default function ItineraryForm({ preselectedDest }: Props) {
       {step===3&&(
         <div>
           <label style={{...fl,marginBottom:12}}>What do you need? Select all that apply</label>
-          <div className="form-row-4">
+          <div className="svc-grid" style={{marginBottom:20}}>
             {SERVICES.map(s=>(
               <div key={s.val} onClick={()=>toggleSvc(s.val)} style={{
-                border:`1px solid ${services.includes(s.val)?"#6B1532":"#D4BFA3"}`,borderRadius:8,
-                padding:"12px 6px",textAlign:"center",cursor:"pointer",
-                background:services.includes(s.val)?"rgba(107,21,50,.06)":"#F8F2E8",transition:"all .25s",
+                border:`1px solid ${services.includes(s.val)?wine:"#D4BFA3"}`,
+                borderRadius:8, padding:"13px 10px", textAlign:"center", cursor:"pointer",
+                background:services.includes(s.val)?"rgba(107,21,50,.05)":cream, transition:"all .25s",
               }}>
-                <div style={{fontSize:20,marginBottom:4}}>{s.icon}</div>
-                <div style={{fontSize:10,letterSpacing:".5px",textTransform:"uppercase",color:services.includes(s.val)?"#6B1532":"#3d1520",fontWeight:services.includes(s.val)?500:400}}>{s.label}</div>
+                <div style={{fontSize:12,letterSpacing:"0.5px",color:services.includes(s.val)?wine:"#3d1520",fontWeight:services.includes(s.val)?500:300}}>{s.label}</div>
               </div>
             ))}
           </div>
           <div style={{marginBottom:16}}>
             <label style={fl}>Anything else Mercedes should know?</label>
-            <textarea style={{...fi,minHeight:100,lineHeight:1.6,resize:"vertical"}} value={notes} onChange={e=>setNotes(e.target.value)}
+            <textarea
+              style={{...fi,minHeight:100,lineHeight:1.6,resize:"vertical"}}
+              value={notes} onChange={e=>setNotes(e.target.value)}
               placeholder="Special requests, dietary needs, anniversaries, specific hotels in mind..."
-              onFocus={e=>{(e.target as HTMLElement).style.cssText+="border-color:#6B1532;background:white;"}}
-              onBlur={e=>{(e.target as HTMLElement).style.cssText+="border-color:#D4BFA3;background:#F8F2E8;"}}/>
+              onFocus={fo as any} onBlur={fb as any}
+            />
           </div>
           <div style={{display:"flex",gap:12,marginTop:8}}>
             <BtnBack onClick={()=>setStep(2)}/>
-            <button onClick={()=>setStep(4)} style={{flex:1,background:"#6B1532",color:"white",border:"none",borderRadius:10,padding:14,fontSize:11,letterSpacing:"2px",textTransform:"uppercase",fontWeight:500,cursor:"pointer",fontFamily:"Inter,sans-serif"}}>
+            <button onClick={()=>setStep(4)} style={{flex:1,background:wine,color:"white",border:"none",borderRadius:10,padding:14,fontSize:11,letterSpacing:"2px",textTransform:"uppercase",fontWeight:500,cursor:"pointer",fontFamily:"Inter,sans-serif"}}>
               Review request →
             </button>
           </div>
@@ -414,16 +444,16 @@ export default function ItineraryForm({ preselectedDest }: Props) {
       {/* ── STEP 4: Review ── */}
       {step===4&&(
         <div>
-          <div style={{background:"#F8F2E8",border:"1px solid #D4BFA3",borderRadius:12,padding:22,marginBottom:18}}>
+          <div style={{background:cream,border:"1px solid #D4BFA3",borderRadius:12,padding:22,marginBottom:18}}>
             {[
-              ["Name", name||"—"],
-              ["Destination", destInfo ? `${destInfo.emoji} ${destInfo.label}` : dest||"—"],
-              ["Dates", dateMode==="fixed"&&depDate&&retDate ? `${depDate} → ${retDate}` : dateMode==="flexible"&&flexMonth ? `${flexMonth}${flexDuration?` · ${flexDuration}`:""}${flexRange?` (${flexRange})`:""}` : undecidedWhen||"—"],
-              ["Departing from", from||"—"],
-              ["Travellers", `${adults} adult${adults>1?"s":""}${children?`, ${children} child${children>1?"ren":""}` :""}${infants?`, ${infants} infant${infants>1?"s":""}`:""}`],
-              ["Trip type", tripType],
-              ["Services", services.join(", ")||"—"],
-              ["WhatsApp", phone||"—"],
+              ["Name",         name||"—"],
+              ["Destination",  dest ? dest+(extraCities.length>0?" + "+extraCities.join(", "):"") : "—"],
+              ["Dates",        dateMode==="fixed"&&depDate&&retDate?`${depDate} → ${retDate} (${flexRange})`:undWhen||(undMonth?`Approx. ${undMonth}`:"")||"—"],
+              ["Departing from",from||"—"],
+              ["Travellers",   `${adults} adult${adults>1?"s":""}${children?`, ${children} child${children>1?"ren":""}`:""  }${infants?`, ${infants} infant${infants>1?"s":""}`:""}`],
+              ["Trip type",    tripType],
+              ["Services",     services.join(", ")||"—"],
+              ["WhatsApp",     phone||"—"],
             ].map(([l,v])=>(
               <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #EDE3D4"}}>
                 <span style={{fontSize:10,letterSpacing:"1.5px",textTransform:"uppercase",color:"#7a5560"}}>{l}</span>
@@ -431,23 +461,30 @@ export default function ItineraryForm({ preselectedDest }: Props) {
               </div>
             ))}
           </div>
-
           <div style={{marginBottom:18,display:"flex",alignItems:"flex-start",gap:10}}>
-            <input type="checkbox" checked={agreed} onChange={e=>setAgreed(e.target.checked)} style={{marginTop:3,accentColor:"#6B1532",width:16,height:16,cursor:"pointer"}}/>
+            <input type="checkbox" style={{marginTop:3,accentColor:wine}}/>
             <span style={{fontSize:13,color:"#3d1520",lineHeight:1.5}}>I agree to be contacted by Mercedes Basutto about my travel enquiry</span>
           </div>
-
-          <button
-            onClick={()=>{ if(agreed) setSubmitted(true); }}
-            style={{width:"100%",background:agreed?"#6B1532":"#D4BFA3",color:"white",border:"none",borderRadius:10,padding:14,fontSize:11,letterSpacing:"2px",textTransform:"uppercase",fontWeight:500,cursor:agreed?"pointer":"not-allowed",fontFamily:"Inter,sans-serif",transition:"background .2s"}}>
-            Send my itinerary request ✈️
+          <button onClick={()=>setSubmit(true)} style={{width:"100%",background:wine,color:"white",border:"none",borderRadius:10,padding:14,fontSize:11,letterSpacing:"2px",textTransform:"uppercase",fontWeight:500,cursor:"pointer",fontFamily:"Inter,sans-serif"}}>
+            Send my itinerary request
           </button>
           <p style={{fontSize:11,color:"#7a5560",textAlign:"center",marginTop:12}}>
-            Prefer to reach out directly? <a href="https://wa.me/971553719863" target="_blank" style={{color:"#6B1532",textDecoration:"none"}}>WhatsApp Mercedes →</a>
+            You'll hear back within 24 hours · <a href="tel:+971553719863" style={{color:wine}}>+971 553 719 863</a>
           </p>
           <div style={{marginTop:12}}><BtnBack onClick={()=>setStep(3)}/></div>
         </div>
       )}
+
+      <style>{`
+        .form-row-2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+        .form-row-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+        .svc-grid   { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+        @media(max-width:640px){
+          .form-row-2 { grid-template-columns:1fr; }
+          .form-row-3 { grid-template-columns:1fr 1fr; }
+          .svc-grid   { grid-template-columns:1fr 1fr; }
+        }
+      `}</style>
     </div>
   );
 }

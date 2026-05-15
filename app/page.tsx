@@ -33,12 +33,8 @@ export default function Home() {
       <Navbar />
       <Hero />
 
-      {/* 3-COLUMN PANEL: 1/4 | 2/4 | 1/4 */}
-      <div id="panel" style={{
-        display: "grid",
-        gridTemplateColumns: "1fr 2fr 1fr",
-        borderBottom: "2px solid #EDE3D4",
-      }}>
+      {/* 3-COLUMN PANEL: 1/4 | 2/4 | 1/4 — responsive via CSS */}
+      <div id="panel">
         <Testimonials />
         <MapPanel onSelect={handleSelect} onFly={handleFly} selectedDest={flyDest} />
         <CalendarPanel onSelect={handleFly} />
@@ -46,7 +42,7 @@ export default function Home() {
 
       {/* FORM SECTION */}
       <section id="plan" ref={formRef} style={{ background: "white", borderTop: "2px solid #EDE3D4" }}>
-        <div style={{ maxWidth: 860, margin: "0 auto", padding: "52px 40px" }}>
+        <div className="form-section-pad">
           <motion.p
             initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }} transition={{ duration: .7 }}
